@@ -1,0 +1,110 @@
+---
+- name: Preparing Jenkins Server
+  hosts: teste
+  become: true
+  tasks:
+
+  - name: Copy files to automate the configuration
+    ansible.builtin.copy:
+      src: ./scripts/
+      dest: /jenkins-scripts/
+      mode: a+x
+
+  - block:
+    - name: Upgrade OS Linux | RedHat
+      yum:
+        name: "*"
+        state: latest
+      when: ansible_os_family == 'RedHat'
+
+    - name: Upgrade OS Linux | Debian
+      apt:
+        name: "*"
+        state: latest
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+  - name: Install Linux Extras | RedHat
+    shell: sudo amazon-linux-extras install epel -y
+    when: ansible_os_family == 'RedHat'
+
+  - name: Installing Linux Apps | RedHat
+    yum:
+      name:
+        - java-devel
+    when: ansible_os_family == 'RedHat'
+
+  - name: Installing Linux Apps | Debian
+    apt:
+      name:
+        - openjdk-8-jdk
+        - gpg
+    when: ansible_os_family == 'Debian'
+
+  - block:
+    - name: Ensure Jenkins repository is added | RedHat
+      yum_repository:
+        name: jenkins-ci
+        description: jenkins-ci package repository
+        baseurl: http://pkg.jenkins.io/redhat
+        gpgkey: https://pkg.jenkins.io/redhat/jenkins.io.key
+        gpgcheck: yes
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure gpp key is imported | RedHat
+      rpm_key:
+        state: present
+        key: https://pkg.jenkins.io/redhat/jenkins.io.key
+      when: ansible_os_family == 'RedHat'
+
+  - block:
+    - name: Ensure Jenkins repository is added | Debian
+      apt_key:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io.key
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure the repository is configured | Debian
+      apt_repository:
+        repo: 'deb [arch=amd64] https://pkg.jenkins.io/debian-stable binary/'
+        state: present
+        filename: jenkins-ci
+      when: ansible_os_family == 'Debian'
+
+  - block:
+    - name: Ensure Jenkins package is installed | RedHat
+      yum:
+        name: jenkins
+        state: present
+        update_cache: true
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure systemd daemon reloaded | RedHat
+      command: systemctl daemon-reload
+      when: ansible_os_family == 'RedHat'
+
+    - name: Update APT Cache | Debian
+      apt:
+        update_cache: true
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure Jenkins is installed | Debian
+      apt:
+        name: jenkins
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure systemd daemon reloaded | Debian
+      command: systemctl daemon-reload
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure Jenkins service is enabled and started
+      service:
+        name: jenkins
+        state: started
+        enabled: yes
+
+  - name: Run a script that create groovy files in Jenkins directory to auto configure
+    shell:
+      chdir: /jenkins-scripts
+      cmd: "sh /jenkins-scripts/main.sh"
